@@ -1,0 +1,12 @@
+node_modules/
+functions/node_modules/
+dist/
+functions/lib/
+.env
+.env.local
+functions/.env*
+!functions/.env.example
+.firebase/
+.local/
+*.log
+playwright-report/
