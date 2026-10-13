@@ -4,6 +4,7 @@ const CONFIG = {
   apiUrl: "https://YOUR_PROJECT.web.app/api/zep/launch",
   sessionId: "COPY_CLASSROOM_ID",
   bridgeSecret: "SET_PRIVATE_SECRET_AT_LEAST_32_CHARACTERS",
+  diagnostics: false,
   useEmbed: false, // New tab is the default. Cross-site cookies may block iframe authentication.
   keys: {
     submit_potato: "potato",
@@ -15,72 +16,77 @@ const CONFIG = {
   },
 };
 const pending = {};
-App.onTriggerObject.Add(function (player, layerID, x, y, key) {
-  const route = CONFIG.keys[key];
-  if (!route) return;
+
+function openScreen(player, route) {
   const name = (player.name || "").trim();
   if (!name) {
-    player.showAlert("ZEP 닉네임을 본명으로 설정한 뒤 다시 시도하세요.");
+    player.showAlert("ZEP 닉네임을 학생 명단에 등록한 이름으로 설정하세요.");
     return;
   }
   const pid = String(player.id);
-  const now = Date.now();
-  if (pending[pid] && now - pending[pid] < 15000) {
-    player.showCenterLabel("화면을 연결하고 있습니다. 잠시 기다려 주세요.");
+  if (pending[pid]) {
+    player.showCenterLabel("연결 중입니다. 잠시 기다려 주세요.");
     return;
   }
-  pending[pid] = now;
-  player.showCenterLabel("탐구 기록을 안전하게 연결하고 있습니다.");
-  App.httpPostJson(
-    CONFIG.apiUrl,
-    { "X-Zep-Secret": CONFIG.bridgeSecret },
-    { sessionId: CONFIG.sessionId, name: name, playerId: pid, route: route },
-    function (res) {
+  const attempt = {};
+  pending[pid] = attempt;
+  player.showCenterLabel("동백꽃: 탐구 기록을 연결하고 있습니다.");
+  App.runLater(function () {
+    if (pending[pid] === attempt) {
       delete pending[pid];
-      try {
-        const result = JSON.parse(res);
-        if (!result.ok || !result.url) {
-          player.showAlert(
-            result.error || "연결에 실패했습니다. 교사에게 알려 주세요.",
-          );
-          return;
+      player.sendMessage("[동백꽃] 15초 동안 서버 응답이 없습니다. 연결 주소·네트워크·앱 오류를 확인하세요.");
+    }
+  }, 15);
+  try {
+    App.httpPostJson(CONFIG.apiUrl, { "X-Zep-Secret": CONFIG.bridgeSecret },
+      { sessionId: CONFIG.sessionId, name: name, playerId: pid, route: route },
+      function (res) {
+        if (pending[pid] !== attempt) return;
+        delete pending[pid];
+        try {
+          const result = JSON.parse(res);
+          if (!result.ok || !result.url) {
+            player.showAlert(result.error || "서버가 연결을 허용하지 않았습니다. 수업 상태와 학생 명단을 확인하세요.");
+            return;
+          }
+          if (CONFIG.useEmbed) {
+            player.showEmbed(result.url, "middle", 1000, 760, true);
+            player.showConfirm("임베드에서 연결되지 않으면 새 창으로 열까요?", function (ok) {
+              if (ok) openScreen(player, route);
+            });
+          } else player.openWebLink(result.url, false);
+        } catch (error) {
+          player.showAlert("서버 응답 처리 또는 웹 창 열기에 실패했습니다. ZEP의 팝업 허용과 앱 오류를 확인하세요.");
         }
-        if (CONFIG.useEmbed) {
-          // Official signature: showEmbed(url, align, width, height, hasBackdrop)
-          player.showEmbed(result.url, "middle", 1000, 760, true);
-          player.showConfirm(
-            "입력 화면이 보이지 않거나 연결 오류가 나면 새 창으로 열까요?",
-            function (ok) {
-              if (ok) openFresh(player, route); // Obtain a fresh single-use token for the new tab.
-            },
-          );
-        } else player.openWebLink(result.url, false);
-      } catch (e) {
-        player.showAlert(
-          "서버 응답을 읽지 못했습니다. F키로 다시 열어 주세요.",
-        );
-      }
-    },
-  );
+      });
+  } catch (error) {
+    delete pending[pid];
+    player.showAlert("ZEP 서버 통신을 시작하지 못했습니다. 관리자 채팅창의 빨간 오류를 확인하세요.");
+  }
+}
+
+App.onTriggerObject.Add(function (player, layerID, x, y, key) {
+  const value = key == null ? "" : String(key).trim();
+  const route = CONFIG.keys[value];
+  if (!route) {
+    if (CONFIG.diagnostics) {
+      player.sendMessage("[동백꽃 진단] F키 이벤트 수신: 전달된 key=" + (value || "(비어 있음)") + ", 레이어=" + layerID + ", 좌표=" + x + "," + y);
+      player.showCenterLabel("F키는 감지됐지만 화면 식별값이 일치하지 않습니다. 채팅창을 확인하세요.");
+    }
+    return;
+  }
+  openScreen(player, route);
 });
-function openFresh(player, route) {
-  App.httpPostJson(
-    CONFIG.apiUrl,
-    { "X-Zep-Secret": CONFIG.bridgeSecret },
-    {
-      sessionId: CONFIG.sessionId,
-      name: (player.name || "").trim(),
-      playerId: String(player.id),
-      route: route,
-    },
-    function (res) {
-      try {
-        const r = JSON.parse(res);
-        if (r.ok && r.url) player.openWebLink(r.url, false);
-        else player.showAlert(r.error || "연결 실패");
-      } catch (e) {
-        player.showAlert("연결에 실패했습니다. 다시 시도하세요.");
-      }
-    },
-  );
+
+if (CONFIG.diagnostics) {
+  App.onStart.Add(function () {
+    App.sayToAll("[동백꽃 연결 v1.1] 앱이 실행됐습니다. Q키로 서버 연결을 시험할 수 있습니다.");
+  });
+  App.onJoinPlayer.Add(function (player) {
+    player.sendMessage("[동백꽃 연결 v1.1] 앱 실행 확인. Q키: 내 탐구 현황 연결 시험");
+  });
+  App.addOnKeyDown(81, function (player) {
+    player.sendMessage("[동백꽃 진단] Q키 이벤트 수신. 서버 연결을 시작합니다.");
+    openScreen(player, "progress");
+  });
 }
