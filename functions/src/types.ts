@@ -1,5 +1,13 @@
 export const ITEMS = ["potato", "branch", "flower", "rooster"] as const;
 export type Item = (typeof ITEMS)[number];
+export type EntryRoute = Item | "progress" | "group";
+export interface Entry {
+  sessionId: string;
+  studentId: string;
+  bindingVersion: number;
+  route: EntryRoute;
+  expiresAt: number;
+}
 export type Phase =
   | "PREPARING"
   | "INDIVIDUAL_OPEN"
@@ -61,6 +69,7 @@ export interface Auth {
   sessionId?: string;
   studentId?: string;
   bindingVersion?: number;
+  development?: boolean;
   expiresAt: number;
 }
 export interface Launch {

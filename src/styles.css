@@ -244,7 +244,7 @@ p {
 .exploration-list {
   margin: 26px 0;
 }
-.exploration-list button {
+.exploration-list > .exploration-row {
   width: 100%;
   display: flex;
   text-align: left;
@@ -692,7 +692,7 @@ hr {
   .form-footer .primary {
     width: 100%;
   }
-  .exploration-list button {
+  .exploration-list > .exploration-row {
     gap: 12px;
   }
   .exploration-list small {

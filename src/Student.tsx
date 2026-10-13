@@ -7,7 +7,7 @@ import {
   type Result,
   type Phase,
 } from "../functions/src/types";
-import { api, logout, RequestError } from "./api";
+import { api, logout, RequestError, setEntryToken } from "./api";
 import { items, phases, questionLabels, groupQuestions } from "./content";
 import { AnswerEditor, SavedAnswers } from "./AnswerEditor";
 interface Snapshot {
@@ -19,6 +19,8 @@ interface Snapshot {
   };
   student: { id: string; name: string };
   responses: Partial<Record<Item, Answer>>;
+  completedItems: Item[];
+  entryRoute: Item | "progress" | "group" | "development";
 }
 interface GroupData {
   group: Group;
@@ -46,6 +48,18 @@ export function Student({ notify }: { notify: (s: string) => void }) {
     history.pushState(null, "", "/?view=" + v);
   };
   useEffect(() => {
+    const incoming = () => {
+      const token = new URLSearchParams(location.hash.slice(1)).get("launch");
+      if (token) {
+        setNeedsCode(false);
+        setError("");
+        setLaunch(token);
+      }
+    };
+    window.addEventListener("hashchange", incoming);
+    return () => window.removeEventListener("hashchange", incoming);
+  }, []);
+  useEffect(() => {
     const back = () =>
       setView(new URLSearchParams(location.search).get("view") ?? "progress");
     window.addEventListener("popstate", back);
@@ -56,19 +70,26 @@ export function Student({ notify }: { notify: (s: string) => void }) {
       setData(await api<Snapshot>("/student"));
       setError("");
     } catch (e) {
+      if (e instanceof RequestError && [401, 403, 404].includes(e.status))
+        setData(null);
       setError((e as Error).message);
     }
   };
   const redeem = async (inputCode?: string) => {
     setRedeeming(true);
     try {
-      const r = await api<{ needsCode?: boolean; route?: string }>("/redeem", {
+      const r = await api<{
+        needsCode?: boolean;
+        route?: string;
+        entryToken?: string;
+      }>("/redeem", {
         token: launch,
         code: inputCode,
       });
       if (r.needsCode) {
         setNeedsCode(true);
       } else {
+        if (r.entryToken) setEntryToken(r.entryToken);
         setLaunch("");
         setNeedsCode(false);
         history.replaceState(null, "", "/?view=" + (r.route ?? "progress"));
@@ -146,8 +167,13 @@ export function Student({ notify }: { notify: (s: string) => void }) {
         {redeeming && <p>안전하게 연결하고 있습니다…</p>}
       </section>
     );
-  const count = ITEMS.filter((x) => data.responses[x]?.submitted).length;
-  const item = ITEMS.includes(view as Item) ? (view as Item) : null;
+  const count = data.completedItems.length;
+  const isDevelopment = data.entryRoute === "development";
+  const activeView =
+    isDevelopment || view === "progress" || view === data.entryRoute
+      ? view
+      : data.entryRoute;
+  const item = ITEMS.includes(activeView as Item) ? (activeView as Item) : null;
   return (
     <>
       <div className="student-heading">
@@ -171,28 +197,33 @@ export function Student({ notify }: { notify: (s: string) => void }) {
       )}
       <nav className="tabs" aria-label="활동 선택">
         <button
-          aria-current={view === "progress" ? "page" : undefined}
+          aria-current={activeView === "progress" ? "page" : undefined}
           onClick={() => navigate("progress")}
         >
           탐구 현황
         </button>
-        {ITEMS.map((x) => (
+        {(isDevelopment
+          ? ITEMS
+          : ITEMS.filter((x) => x === data.entryRoute)
+        ).map((x) => (
           <button
             key={x}
-            aria-current={view === x ? "page" : undefined}
+            aria-current={activeView === x ? "page" : undefined}
             onClick={() => navigate(x)}
           >
-            {items[x].name} {data.responses[x] ? "✓" : ""}
+            {items[x].name} {data.completedItems.includes(x) ? "✓" : ""}
           </button>
         ))}
-        <button
-          aria-current={view === "group" ? "page" : undefined}
-          onClick={() => navigate("group")}
-        >
-          모둠 활동
-        </button>
+        {(isDevelopment || data.entryRoute === "group") && (
+          <button
+            aria-current={activeView === "group" ? "page" : undefined}
+            onClick={() => navigate("group")}
+          >
+            모둠 활동
+          </button>
+        )}
       </nav>
-      {view === "progress" && (
+      {activeView === "progress" && (
         <section className="panel">
           <div className="eyebrow">나의 자연 탐구 기록</div>
           <h2>네 가지 자연, 네 가지 생각</h2>
@@ -201,19 +232,24 @@ export function Student({ notify }: { notify: (s: string) => void }) {
           </p>
           <div className="exploration-list">
             {ITEMS.map((x, i) => (
-              <button key={x} onClick={() => navigate(x)}>
+              <div className="exploration-row" key={x}>
                 <span className="index">0{i + 1}</span>
                 <span>
                   <strong>{items[x].name}</strong>
                   <small>{items[x].title}</small>
                 </span>
                 <span
-                  className={"badge " + (data.responses[x] ? "complete" : "")}
+                  className={
+                    "badge " +
+                    (data.completedItems.includes(x) ? "complete" : "")
+                  }
                 >
-                  {data.responses[x] ? "제출 완료" : "미제출"}
+                  {data.completedItems.includes(x) ? "제출 완료" : "미제출"}
                 </span>
-                <span>→</span>
-              </button>
+                {isDevelopment && (
+                  <button onClick={() => navigate(x)}>개발 테스트</button>
+                )}
+              </div>
             ))}
           </div>
           {count === 4 && (
@@ -268,7 +304,7 @@ export function Student({ notify }: { notify: (s: string) => void }) {
           )}
         </section>
       )}
-      {view === "group" && <GroupView student={data} notify={notify} />}
+      {activeView === "group" && <GroupView student={data} notify={notify} />}
       <footer className="page-footer">
         <span>자연과 인간의 관계를 발견하는 시간</span>
         <div className="actions">

@@ -14,6 +14,7 @@ ZEP Script의 `player.name`과 `player.id`는 서버 스크립트에서 얻습�
 - URL fragment만 토큰을 운반하며 실명·응답·비밀을 URL에 넣지 않음
 - 코드 오류는 토큰당 최대 5회, IP별 요청 횟수 제한은 저장소 트랜잭션으로 적용
 - 학생 세션 토큰은 HttpOnly/Secure/SameSite=Lax 쿠키, 서버 저장 해시, 8시간 만료
+- 별도 탭 입장 토큰은 sessionStorage에 보관하며 `X-Zep-Entry` 헤더로 보냅니다. 토큰만으로 인증할 수 없고 HttpOnly 신원 쿠키와 학생·수업·연결 버전이 일치해야 합니다. 서버는 열린 오브젝트 범위만 허용합니다.
 - Firebase Hosting이 프록시 전달하는 `__session` 쿠키를 사용
 - 최초 연결에서 코드 해시를 확인한 뒤 플레이어 ID를 묶으며 동명이인은 내부 ID로 구분
 - 재연결·명단 변경·수업 초기화 시 `bindingVersion` 증가로 기존 쿠키 접근 취소
@@ -49,7 +50,7 @@ CSRF는 SameSite 쿠키, `X-Classroom-Request` 헤더, 출처 검사로 방어�
 
 1. GitHub에는 예시 환경 파일만 포함하고 실제 코드·Firebase 관리자 키·학생 CSV/JSON은 제외합니다.
 2. 실제 Firebase 교사 UID 허용 목록, Rules, Secret Manager, Hosting 출처를 점검합니다.
-3. `auth`, `launches`, `limits`의 `expireOn` TTL을 켭니다. 숫자 `expiresAt`은 서버 검증에, Timestamp `expireOn`은 실제 정리에 사용합니다.
+3. `auth`, `launches`, `entries`, `limits`의 `expireOn` TTL을 켭니다. 숫자 `expiresAt`은 서버 검증에, Timestamp `expireOn`은 실제 정리에 사용합니다.
 4. 단일 운영 프로젝트를 학급마다 공유할 때 수업 ID로 분리되며 다른 교사는 자기 소유 수업만 조회합니다.
 5. 실제 두 학생 이상으로 토큰 만료, 명단·코드, 모둠 격리, 마감 후 수정 차단을 검증합니다.
 6. 학교 개인정보 처리 방침에 따라 보관 기간과 담당자를 정하고 수업 삭제를 사용합니다. 다운로드·클라우드 백업까지 자동 삭제되는 것은 아닙니다.

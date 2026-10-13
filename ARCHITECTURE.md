@@ -21,6 +21,7 @@ API → Firestore 트랜잭션 또는 로컬 단일 프로세스 파일 저장
 - `groupResults[groupId]`: q1, q2, submittedBy, firstSubmittedAt, updatedAt, version, requestId
 - `launches/{sha256}`: sessionId, name, zepId, route, expiresAt, used, attempts, expireOn
 - `auth/{sha256}`: role, uid, sessionId, studentId, bindingVersion, expiresAt, expireOn
+- `entries/{sha256}`: sessionId, studentId, bindingVersion, route (자연물 하나/현황/모둠), expiresAt, expireOn. 신원 쿠키와 함께 요청하는 탭별 입장 권한입니다.
 - `limits/{sha256}`: count, expiresAt, expireOn
 
 실명은 표시용이며 관계는 내부 ID를 사용합니다. 로컬 데이터베이스는 동일 키를 JSON으로 저장합니다. 한 수업 문서에 묶은 이유는 15명 규모에서 마감·편성·결론과 응답 변경을 같은 트랜잭션으로 검증하기 위해서입니다. 30명과 답변당 1,500자에서도 800KB 상한을 넘으면 저장을 거부하며 무조건 성공으로 처리하지 않습니다. 제출 크기가 커지는 대규모 서비스에는 응답 하위 컬렉션과 권한 상태 트랜잭션을 분리해야 합니다.
@@ -50,6 +51,8 @@ PREPARING → INDIVIDUAL_OPEN → INDIVIDUAL_CLOSED → GROUP_OPEN → COMPLETED
 | DELETE /api/teacher/sessions/:sid | 소유 교사, 수업 ID 확인 | 수업 완전 삭제 |
 
 학생 변경 API에서 요청 본문의 학생/수업/모둠 ID를 권한으로 믿지 않습니다. 편성 수정과 공개는 `revision=updatedAt`을 검사해 오래된 교사 화면에서 확정하는 오류를 막습니다. 학생 응답은 `version`, `requestId`를 전달합니다.
+
+학생 API는 `X-Zep-Entry`의 해시로 탭별 입장 권한을 읽고 신원 쿠키와 같은 학생·수업·연결 버전인지 확인합니다. 다른 자연물 API와 모둠 API는 해당 입장 범위가 아니면 차단합니다. 현황 범위는 답변 원문 없이 완료 자연물 목록만 반환합니다. 여러 탭은 각자 ZEP에서 발급된 범위를 유지합니다.
 
 ## 비용·동시성
 

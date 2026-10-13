@@ -5,6 +5,7 @@
 ## 포함된 기능
 
 - 네 자연물 두 문항 작성·수정, 0/4~4/4 진행률, 서버 저장 성공 확인, 기기 임시 작성 보존
+- 운영 학생은 ZEP 해당 오브젝트에서 연 자연물 하나만 작성합니다. 현황에서는 완료 여부만 확인하며 주소·API를 바꿔 다른 자연물을 작성할 수 없습니다.
 - 교사 인증, 수업·명단 관리, 제출 현황 5초 갱신, 학생 응답 조회, 탐구 마감·재개
 - Fisher–Yates 균등 편성, 제외 학생 설정, 이동·기록 담당자 수정, 저장·확정·공개 분리
 - 본인 모둠만 응답 비교, 담당자 단일 공동 결론 제출, 버전 충돌 검사
@@ -76,7 +77,7 @@ npm run build
 firebase deploy --only firestore:rules,functions,hosting
 ```
 
-10. Firestore TTL 설정에서 `auth`, `launches`, `limits` 컬렉션 그룹의 `expireOn` 필드를 TTL로 지정합니다. 만료 접근은 서버가 즉시 차단하며 실제 삭제는 TTL 지연 후 이루어집니다. TTL 비용도 과금에 포함될 수 있습니다.
+10. Firestore TTL 설정에서 `auth`, `launches`, `entries`, `limits` 컬렉션 그룹의 `expireOn` 필드를 TTL로 지정합니다. 만료 접근은 서버가 즉시 차단하며 실제 삭제는 TTL 지연 후 이루어집니다. TTL 비용도 과금에 포함될 수 있습니다.
 11. Hosting URL의 `/teacher`에서 Firebase 교사 계정으로 로그인합니다. 수업 생성·명단 등록 후 ZEP 설정을 마칩니다.
 12. 교사와 학생 테스트 계정으로 최소 두 학생의 제출·타인 접근 차단·모둠 공개를 실제 배포 환경에서 재검증합니다. Firebase Emulator 테스트를 원하면 `firebase emulators:start --only firestore,functions,hosting,auth`를 사용할 수 있지만 교사 UID·환경 설정을 별도로 맞춰야 합니다. 이 명령의 성공을 자동 테스트 결과로 간주하지 않습니다.
 

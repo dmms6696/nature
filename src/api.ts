@@ -1,6 +1,16 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
 let teacherToken: () => Promise<string> = async () => "";
+export function setEntryToken(value: string) {
+  sessionStorage.setItem("nature:entry", value);
+}
+function getEntryToken() {
+  try {
+    return sessionStorage.getItem("nature:entry") ?? "";
+  } catch {
+    return "";
+  }
+}
 export class RequestError extends Error {
   constructor(
     public status: number,
@@ -23,6 +33,7 @@ export async function api<T>(
       headers: {
         "Content-Type": "application/json",
         "X-Classroom-Request": "1",
+        ...(getEntryToken() ? { "X-Zep-Entry": getEntryToken() } : {}),
         ...(token ? { Authorization: "Bearer " + token } : {}),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -77,6 +88,7 @@ export async function logout() {
   teacherToken = async () => "";
   if (fb) await signOut(fb);
   await api("/logout", {});
+  sessionStorage.removeItem("nature:entry");
   for (const key of Object.keys(localStorage))
     if (key.startsWith("nature:")) localStorage.removeItem(key);
 }

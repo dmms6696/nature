@@ -1,7 +1,16 @@
 import express from "express";
 import { getAuth } from "firebase-admin/auth";
 import { timingSafeEqual } from "node:crypto";
-import type { Auth, Launch, Session, Store, Group, Phase } from "./types.js";
+import type {
+  Auth,
+  Launch,
+  Session,
+  Store,
+  Group,
+  Phase,
+  Entry,
+  EntryRoute,
+} from "./types.js";
 import { ITEMS } from "./types.js";
 import {
   ApiError,
@@ -147,7 +156,21 @@ export function createApp(store: Store, options: Options) {
       401,
       "학생 연결이 변경되었습니다. ZEP에서 다시 접속하세요.",
     );
-    return { auth, s, st };
+    if (options.local && auth.development)
+      return { auth, s, st, entryRoute: "development" as const };
+    const rawEntry = req.get("X-Zep-Entry");
+    assert(rawEntry, 401, "해당 ZEP 오브젝트에서 화면을 다시 열어 주세요.");
+    const entry = await store.read<Entry>("entries/" + hash(rawEntry));
+    assert(
+      entry &&
+        entry.expiresAt > Date.now() &&
+        entry.sessionId === s.id &&
+        entry.studentId === st.id &&
+        entry.bindingVersion === st.bindingVersion,
+      401,
+      "오브젝트 연결이 만료되거나 변경되었습니다. ZEP에서 다시 열어 주세요.",
+    );
+    return { auth, s, st, entryRoute: entry.route };
   }
   function groupFor(s: Session, studentId: string) {
     assert(
@@ -196,6 +219,7 @@ export function createApp(store: Store, options: Options) {
       sessionId: s.id,
       studentId: st.id,
       bindingVersion: st.bindingVersion,
+      development: true,
       expiresAt: Date.now() + 8 * 3600_000,
     });
     res.json({ ok: true });
@@ -367,14 +391,35 @@ export function createApp(store: Store, options: Options) {
       bindingVersion,
       expiresAt: Date.now() + 8 * 3600_000,
     });
-    res.json({ ok: true, route: launch.route });
+    const entryToken = token();
+    await store.update<Entry, void>("entries/" + hash(entryToken), () => ({
+      value: {
+        sessionId: s.id,
+        studentId,
+        bindingVersion,
+        route: launch.route as EntryRoute,
+        expiresAt: Date.now() + 8 * 3600_000,
+      },
+      result: undefined,
+    }));
+    res.json({ ok: true, route: launch.route, entryToken });
   });
   route("get", "/api/student", async (req, res) => {
-    const { auth, s, st } = await student(req);
+    const { auth, s, st, entryRoute } = await student(req);
+    const own = s.responses[auth.studentId!] ?? {};
+    const responses =
+      entryRoute === "development"
+        ? own
+        : ITEMS.includes(entryRoute as (typeof ITEMS)[number]) &&
+            own[entryRoute as (typeof ITEMS)[number]]
+          ? { [entryRoute]: own[entryRoute as (typeof ITEMS)[number]] }
+          : {};
     res.json({
       session: publicSession(s),
       student: { id: st.id, name: st.name },
-      responses: s.responses[auth.studentId!] ?? {},
+      responses,
+      completedItems: ITEMS.filter((item) => own[item]?.submitted),
+      entryRoute,
     });
   });
   route("post", "/api/student/heartbeat", async (req, res) => {
@@ -395,7 +440,12 @@ export function createApp(store: Store, options: Options) {
   });
   route("post", "/api/student/responses/:item", async (req, res) => {
     csrf(req);
-    const { auth, s } = await student(req);
+    const { auth, s, entryRoute } = await student(req);
+    assert(
+      entryRoute === "development" || entryRoute === String(req.params.item),
+      403,
+      "이 자연물의 ZEP 제출 오브젝트를 조작한 뒤 작성하세요.",
+    );
     await rate("save:" + s.id + auth.studentId, 30);
     const answer = await store.update<Session, unknown>(
       "sessions/" + s.id,
@@ -423,7 +473,12 @@ export function createApp(store: Store, options: Options) {
     res.json(answer);
   });
   route("get", "/api/student/group", async (req, res) => {
-    const { auth, s } = await student(req);
+    const { auth, s, entryRoute } = await student(req);
+    assert(
+      entryRoute === "development" || entryRoute === "group",
+      403,
+      "ZEP의 모둠 활동 오브젝트에서 열어 주세요.",
+    );
     const g = groupFor(s, auth.studentId!);
     assert(
       !req.query.groupId || req.query.groupId === g.id,
@@ -442,7 +497,12 @@ export function createApp(store: Store, options: Options) {
   });
   route("post", "/api/student/group/result", async (req, res) => {
     csrf(req);
-    const { auth, s } = await student(req);
+    const { auth, s, entryRoute } = await student(req);
+    assert(
+      entryRoute === "development" || entryRoute === "group",
+      403,
+      "ZEP의 모둠 활동 오브젝트에서 열어 주세요.",
+    );
     const result = await store.update<Session, unknown>(
       "sessions/" + s.id,
       (v) => {
@@ -747,15 +807,13 @@ export function createApp(store: Store, options: Options) {
     ) => {
       const known = err instanceof ApiError;
       const malformed = err instanceof SyntaxError;
-      res
-        .status(known ? err.status : malformed ? 400 : 503)
-        .json({
-          error: known
-            ? err.message
-            : malformed
-              ? "잘못된 JSON 요청입니다."
-              : "저장소 또는 인증 처리에 실패했습니다. 작성 내용은 보존됩니다. 다시 시도하세요.",
-        });
+      res.status(known ? err.status : malformed ? 400 : 503).json({
+        error: known
+          ? err.message
+          : malformed
+            ? "잘못된 JSON 요청입니다."
+            : "저장소 또는 인증 처리에 실패했습니다. 작성 내용은 보존됩니다. 다시 시도하세요.",
+      });
     },
   );
   return app;

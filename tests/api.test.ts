@@ -35,6 +35,115 @@ function fixture(n = 15): Session {
 const origin = "http://127.0.0.1:5173",
   secret = "s".repeat(40);
 const headers = { "X-Classroom-Request": "1", Origin: origin };
+
+test("ZEP에서 연 자연물만 조회·수정, 현황 화면과 주소 조작은 작성 권한 없음", async () => {
+  const t = await setup();
+  try {
+    const a = request.agent(t.app);
+    let token = await launch(t.app, "학생 2", "scope-player", "potato");
+    const connected = (
+      await a
+        .post("/api/redeem")
+        .set(headers)
+        .send({ token, code: "code-2" })
+        .expect(200)
+    ).body;
+    const entryA = connected.entryToken;
+    a.set("X-Zep-Entry", entryA);
+    await a
+      .post("/api/student/responses/potato")
+      .set(headers)
+      .send({
+        q1: "감자 장면 탐구",
+        q2: "마음을 전하는 자연",
+        version: 0,
+        requestId: "scope-a",
+      })
+      .expect(200);
+    await a
+      .post("/api/student/responses/branch")
+      .set(headers)
+      .send({
+        q1: "주소 조작",
+        q2: "scope 위조",
+        version: 0,
+        requestId: "scope-b",
+        route: "branch",
+      })
+      .expect(403);
+    await a.get("/api/student/group").expect(403);
+    let me = (await a.get("/api/student?view=branch").expect(200)).body;
+    assert.equal(me.entryRoute, "potato");
+    assert.deepEqual(me.completedItems, ["potato"]);
+    assert.deepEqual(Object.keys(me.responses), ["potato"]);
+    token = await launch(t.app, "학생 2", "scope-player", "progress");
+    const progress = (
+      await a.post("/api/redeem").set(headers).send({ token }).expect(200)
+    ).body;
+    a.set("X-Zep-Entry", progress.entryToken);
+    me = (await a.get("/api/student").expect(200)).body;
+    assert.equal(me.entryRoute, "progress");
+    assert.deepEqual(Object.keys(me.responses), []);
+    assert.deepEqual(me.completedItems, ["potato"]);
+    await a
+      .post("/api/student/responses/potato")
+      .set(headers)
+      .send({
+        q1: "우회",
+        q2: "현황에서 작성",
+        version: 1,
+        requestId: "progress-write",
+      })
+      .expect(403);
+    // Another tab may still use its legitimate potato entry while sharing identity cookies.
+    await a
+      .post("/api/student/responses/potato")
+      .set({ ...headers, "X-Zep-Entry": entryA })
+      .send({
+        q1: "감자 수정",
+        q2: "원래 감자 탭에서 수정",
+        version: 1,
+        requestId: "old-tab",
+      })
+      .expect(200);
+    a.set("X-Zep-Entry", "");
+    await a.get("/api/student").expect(401);
+  } finally {
+    await t.dispose();
+  }
+});
+test("입장 권한 토큰은 학생·수업·연결 버전에 묶이며 추측·만료 차단", async () => {
+  const t = await setup();
+  try {
+    const a = request.agent(t.app),
+      b = request.agent(t.app);
+    const first = await launch(t.app, "학생 2", "scoped-a");
+    const ra = (
+      await a
+        .post("/api/redeem")
+        .set(headers)
+        .send({ token: first, code: "code-2" })
+        .expect(200)
+    ).body;
+    const second = await launch(t.app, "학생 3", "scoped-b");
+    const rb = (
+      await b
+        .post("/api/redeem")
+        .set(headers)
+        .send({ token: second, code: "code-3" })
+        .expect(200)
+    ).body;
+    await a.get("/api/student").set("X-Zep-Entry", rb.entryToken).expect(401);
+    await a.get("/api/student").set("X-Zep-Entry", "guessed-entry").expect(401);
+    await t.store.update<any, void>("entries/" + hash(ra.entryToken), (v) => ({
+      value: { ...v, expiresAt: 0 },
+      result: undefined,
+    }));
+    await a.get("/api/student").set("X-Zep-Entry", ra.entryToken).expect(401);
+  } finally {
+    await t.dispose();
+  }
+});
 async function setup() {
   const dir = await mkdtemp(join(tmpdir(), "nature-"));
   const store = new FileStore(join(dir, "db.json"));
@@ -91,11 +200,12 @@ test("ZEP 자동 이름·동명이인 코드·단일 사용·재접속·위조 �
       .set(headers)
       .send({ token, code: "wrong" })
       .expect(403);
-    await a
+    const connected = await a
       .post("/api/redeem")
       .set(headers)
       .send({ token, code: "code-1" })
       .expect(200);
+    a.set("X-Zep-Entry", connected.body.entryToken);
     await request(t.app)
       .post("/api/redeem")
       .set(headers)
