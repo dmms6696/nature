@@ -46,8 +46,8 @@ test("15명 균등 편성, 중복 누락 없음", () => {
   );
   validateGroups(s, groups);
 });
-test("1~30명 모든 모둠 수에서 균등, 입력 명단 불변", () => {
-  for (let n = 1; n <= 30; n++)
+test("1~45명 모든 모둠 수에서 균등, 입력 명단 불변", () => {
+  for (let n = 1; n <= 45; n++)
     for (let k = 1; k <= n; k++) {
       const ids = Array.from({ length: n }, (_, i) => String(i));
       const copy = [...ids];

@@ -580,9 +580,9 @@ export function createApp(store: Store, options: Options) {
           assert(
             Array.isArray(req.body.names) &&
               req.body.names.length >= 1 &&
-              req.body.names.length <= 30,
+              req.body.names.length <= 45,
             400,
-            "1~30명의 이름을 등록하세요.",
+            "1~45명의 이름을 등록하세요.",
           );
           assert(
             v.students.length === 0,
@@ -698,6 +698,43 @@ export function createApp(store: Store, options: Options) {
           st.bindingVersion++;
           st.codeHash = hash(code);
           extra = { codes: [{ id: st.id, name: st.name, code }] };
+        } else if (operation === "set-code") {
+          const st = v.students.find((x) => x.id === req.body.studentId);
+          assert(st, 404, "학생이 없습니다.");
+          const code = text(req.body.code, 32).toLowerCase();
+          assert(
+            /^[a-z0-9_-]{6,32}$/.test(code),
+            400,
+            "코드는 영문·숫자·밑줄·하이픈 6~32자로 지정하세요.",
+          );
+          assert(
+            !v.students.some(
+              (x) => x.id !== st.id && x.codeHash === hash(code),
+            ),
+            409,
+            "다른 학생이 사용 중인 코드입니다.",
+          );
+          st.codeHash = hash(code);
+          st.zepId = null;
+          st.bindingVersion++;
+          extra = { codes: [{ id: st.id, name: st.name, code }] };
+        } else if (operation === "reset-roster") {
+          assert(
+            req.body.confirm === v.id,
+            400,
+            "수업 ID를 입력해 명단 초기화를 확인하세요.",
+          );
+          assert(
+            req.body.revision === v.updatedAt,
+            409,
+            "수업 데이터가 변경되었습니다. 확인 후 다시 초기화하세요.",
+          );
+          v.students = [];
+          v.responses = {};
+          v.groups = [];
+          v.groupResults = {};
+          v.groupsPublished = false;
+          v.phase = "PREPARING";
         } else if (operation === "reset") {
           assert(
             req.body.confirm === v.id,

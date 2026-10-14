@@ -448,7 +448,7 @@ export function Teacher({
               <h3>실명은 표시용, 내부 ID는 구분용</h3>
               <p className="muted">
                 이름을 한 줄에 한 명씩 입력하세요. 동명이인을 허용하며 개인 확인
-                코드로 구분합니다. 최대 30명입니다.
+                코드로 구분합니다. 최대 45명입니다.
               </p>
               {data.phase === "PREPARING" && !data.students.length && (
                 <>
@@ -477,6 +477,36 @@ export function Teacher({
                   </button>
                 </>
               )}
+              {data.students.length > 0 && (
+                <div className="notice warning">
+                  <p>
+                    명단 초기화는 모든 학생과 개인 응답, 모둠, 공동 결론을
+                    삭제하고 준비 단계로 돌아갑니다. 먼저 결과를 다운로드하세요.
+                    수업 자체는 유지됩니다.
+                  </p>
+                  <button
+                    disabled={busy}
+                    onClick={async () => {
+                      const value = await prompt(
+                        "명단과 모든 학습 기록을 삭제하려면 아래 수업 ID를 그대로 입력하세요: " +
+                          data.id,
+                      );
+                      if (value === data.id)
+                        void run(async () => {
+                          await operation("reset-roster", {
+                            confirm: value,
+                            revision: data.updatedAt,
+                          });
+                          setCodes([]);
+                          setNames("");
+                          setSelectedStudent("");
+                        });
+                    }}
+                  >
+                    학생 명단 초기화
+                  </button>
+                </div>
+              )}
               {data.students.map((st) => (
                 <div className="roster-row" key={st.id}>
                   <span>
@@ -501,6 +531,29 @@ export function Teacher({
                     }}
                   >
                     연결 초기화 · 코드 재발급
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={async () => {
+                      const code = await prompt(
+                        st.name +
+                          "의 확인 코드를 지정하세요. 영문·숫자·밑줄·하이픈 6~32자이며 대소문자는 구분하지 않습니다.",
+                      );
+                      if (
+                        code?.trim() &&
+                        (await confirm(
+                          "코드를 변경하면 기존 ZEP 연결과 접속이 해제됩니다. 개인 응답은 유지됩니다. 저장할까요?",
+                        ))
+                      )
+                        void run(() =>
+                          operation("set-code", {
+                            studentId: st.id,
+                            code: code.trim(),
+                          }),
+                        );
+                    }}
+                  >
+                    코드 직접 지정
                   </button>
                   <button
                     disabled={busy}

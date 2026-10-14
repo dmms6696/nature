@@ -664,3 +664,112 @@ test("토큰 동시 재사용은 한 번만 성공, 최초 코드 5회 실패는
     await t.dispose();
   }
 });
+
+test("교사 코드 직접 지정: 검증·중복·접속 해제·새 코드 연결", async () => {
+  const t = await setup();
+  try {
+    const a = request.agent(t.app);
+    const token = await launch(t.app, "학생 2", "custom-player", "potato");
+    await a
+      .post("/api/redeem")
+      .set(headers)
+      .send({ token, code: "code-2" })
+      .expect(200);
+    const endpoint = "/api/teacher/sessions/classroom/set-code";
+    await a
+      .post(endpoint)
+      .set(headers)
+      .send({ studentId: "s2", code: "654321" })
+      .expect(403);
+    await t.teacher
+      .post(endpoint)
+      .set(headers)
+      .send({ studentId: "s2", code: "123" })
+      .expect(400);
+    await t.teacher
+      .post(endpoint)
+      .set(headers)
+      .send({ studentId: "s2", code: "code-3" })
+      .expect(409);
+    const result = (
+      await t.teacher
+        .post(endpoint)
+        .set(headers)
+        .send({ studentId: "s2", code: "ABC123" })
+        .expect(200)
+    ).body;
+    assert.equal(result.codes[0].code, "abc123");
+    assert.ok(!JSON.stringify(result.session).includes("codeHash"));
+    await a.get("/api/student").expect(401);
+    const next = await launch(t.app, "학생 2", "custom-player", "potato");
+    await a
+      .post("/api/redeem")
+      .set(headers)
+      .send({ token: next, code: "code-2" })
+      .expect(403);
+    await a
+      .post("/api/redeem")
+      .set(headers)
+      .send({ token: next, code: "ABC123" })
+      .expect(200);
+  } finally {
+    await t.dispose();
+  }
+});
+test("명단 초기화 확인·이전 접속 차단·45명 재등록·46명 거부", async () => {
+  const t = await setup();
+  try {
+    const a = request.agent(t.app);
+    await a
+      .post("/api/dev/login")
+      .set(headers)
+      .send({ sessionId: "classroom", studentId: "s2" })
+      .expect(200);
+    const endpoint = "/api/teacher/sessions/classroom/reset-roster";
+    await a
+      .post(endpoint)
+      .set(headers)
+      .send({ confirm: "classroom", revision: 1 })
+      .expect(403);
+    await t.teacher
+      .post(endpoint)
+      .set(headers)
+      .send({ confirm: "wrong", revision: 1 })
+      .expect(400);
+    await t.teacher
+      .post(endpoint)
+      .set(headers)
+      .send({ confirm: "classroom", revision: 0 })
+      .expect(409);
+    const cleared = (
+      await t.teacher
+        .post(endpoint)
+        .set(headers)
+        .send({ confirm: "classroom", revision: 1 })
+        .expect(200)
+    ).body.session;
+    assert.equal(cleared.students.length, 0);
+    assert.equal(cleared.phase, "PREPARING");
+    assert.deepEqual(cleared.responses, {});
+    assert.deepEqual(cleared.groups, []);
+    assert.deepEqual(cleared.groupResults, {});
+    await a.get("/api/student").expect(401);
+    const names = Array.from({ length: 45 }, (_, i) => "학생 " + i);
+    await t.teacher
+      .post("/api/teacher/sessions/classroom/roster")
+      .set(headers)
+      .send({ names: [...names, "학생 46"] })
+      .expect(400);
+    const registered = (
+      await t.teacher
+        .post("/api/teacher/sessions/classroom/roster")
+        .set(headers)
+        .send({ names })
+        .expect(200)
+    ).body;
+    assert.equal(registered.session.students.length, 45);
+    assert.equal(registered.codes.length, 45);
+  } finally {
+    await t.dispose();
+  }
+});

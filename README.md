@@ -19,7 +19,7 @@ React 19, TypeScript, Vite, Tailwind CSS 4, Express, Firebase Authentication, Cl
 
 운영 저장은 Firestore이며 로컬은 `.local/database.json`에 원자적 파일 교체로 저장합니다. 두 데이터베이스는 연결되지 않습니다. 로컬 API는 `127.0.0.1`에서만 실행됩니다. Cloud Function은 `local:false`를 고정하며 가상 학생 선택과 개발 로그인을 허용하지 않습니다.
 
-15명 규모의 간편한 운영을 위해 수업 한 건과 학생·응답·모둠·결론을 `sessions/{id}` 문서 하나에 묶고 트랜잭션으로 갱신합니다. 질문당 1,500자, 최대 30명, 800KB 서버 상한을 적용합니다. 응답은 내부 학생 ID × 자연물 ID로 갱신되어 중복 행을 만들지 않습니다. 대규모 확장에는 하위 컬렉션 분리가 필요합니다. 자세한 설계는 [ARCHITECTURE.md](ARCHITECTURE.md)를 참고하세요.
+15명 규모의 간편한 운영을 위해 수업 한 건과 학생·응답·모둠·결론을 `sessions/{id}` 문서 하나에 묶고 트랜잭션으로 갱신합니다. 질문당 1,500자, 최대 45명, 800KB 서버 상한을 적용합니다. 응답은 내부 학생 ID × 자연물 ID로 갱신되어 중복 행을 만들지 않습니다. 대규모 확장에는 하위 컬렉션 분리가 필요합니다. 자세한 설계는 [ARCHITECTURE.md](ARCHITECTURE.md)를 참고하세요.
 
 ## 로컬 실행 — Firebase 계정 없이 사용 가능
 
