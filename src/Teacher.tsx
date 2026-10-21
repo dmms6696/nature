@@ -1,3 +1,4 @@
+import { parseCodeList } from "./rosterImport";
 import { useDialogs } from "./Dialogs";
 import { useEffect, useState } from "react";
 import {
@@ -36,11 +37,15 @@ export function Teacher({
     [password, setPassword] = useState(""),
     [title, setTitle] = useState("동백꽃 · 자연과 인간의 관계"),
     [names, setNames] = useState(""),
+    [bulkCodes, setBulkCodes] = useState(""),
     [codes, setCodes] = useState<Code[]>([]),
     [selectedStudent, setSelectedStudent] = useState(""),
     [sort, setSort] = useState("name"),
     [incomplete, setIncomplete] = useState(false),
     [showPresentation, setShowPresentation] = useState(false);
+  useEffect(() => {
+    setBulkCodes("");
+  }, [sid]);
   const refresh = async () => {
     try {
       const sessions = await api<typeof list>("/teacher/sessions");
@@ -504,6 +509,46 @@ export function Teacher({
                     }}
                   >
                     학생 명단 초기화
+                  </button>
+                </div>
+              )}
+              {data.students.length > 0 && (
+                <div className="panel">
+                  <h4>확인 코드 일괄 지정</h4>
+                  <p>
+                    한 줄에 이름과 코드를 입력하세요. 쉼표·탭·표 형식을
+                    지원합니다. 앞자리 0은 유지됩니다. 등록된 학생만 변경하며,
+                    오류가 하나라도 있으면 전체를 저장하지 않습니다.
+                  </p>
+                  <textarea
+                    aria-label="학생 확인 코드 일괄 입력"
+                    rows={8}
+                    value={bulkCodes}
+                    onChange={(e) => setBulkCodes(e.target.value)}
+                    placeholder={"학생 이름, 확인 코드"}
+                  />
+                  <button
+                    className="primary"
+                    disabled={busy || !bulkCodes.trim()}
+                    onClick={() =>
+                      void run(async () => {
+                        const entries = parseCodeList(bulkCodes);
+                        if (
+                          await confirm(
+                            entries.length +
+                              "명의 코드를 일괄 적용할까요? 코드가 바뀐 학생은 기존 접속이 해제됩니다. 개인 응답은 유지됩니다.",
+                          )
+                        ) {
+                          await operation("bulk-codes", { entries });
+                          setBulkCodes("");
+                        }
+                      })
+                    }
+                  >
+                    코드 일괄 적용
+                  </button>
+                  <button disabled={busy} onClick={() => setBulkCodes("")}>
+                    입력 지우기
                   </button>
                 </div>
               )}

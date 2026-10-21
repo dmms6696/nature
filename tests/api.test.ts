@@ -773,3 +773,80 @@ test("명단 초기화 확인·이전 접속 차단·45명 재등록·46명 거�
     await t.dispose();
   }
 });
+
+test("코드 일괄 변경은 전체 검증 후 원자 저장, 중복·명단 불일치·학생 권한 거부", async () => {
+  const t = await setup();
+  try {
+    const endpoint = "/api/teacher/sessions/classroom/bulk-codes";
+    const a = request.agent(t.app);
+    await a
+      .post("/api/dev/login")
+      .set(headers)
+      .send({ sessionId: "classroom", studentId: "s2" })
+      .expect(200);
+    await a
+      .post(endpoint)
+      .set(headers)
+      .send({ entries: [{ name: "학생 2", code: "000001" }] })
+      .expect(403);
+    for (const entries of [
+      [
+        { name: "학생 2", code: "000001" },
+        { name: "없는 학생", code: "000002" },
+      ],
+      [{ name: "동명이인", code: "000001" }],
+      [
+        { name: "학생 2", code: "000001" },
+        { name: "학생 2", code: "000002" },
+      ],
+      [{ name: "학생 2", code: 10101 }],
+      [
+        { name: "학생 2", code: "000001" },
+        { name: "학생 3", code: "bad" },
+      ],
+    ]) {
+      await t.teacher.post(endpoint).set(headers).send({ entries }).expect(400);
+      assert.equal(
+        (await t.store.read<Session>("sessions/classroom"))!.students[2]
+          .codeHash,
+        hash("code-2"),
+      );
+    }
+    await t.teacher
+      .post(endpoint)
+      .set(headers)
+      .send({
+        entries: [
+          { name: "학생 2", code: "000001" },
+          { name: "학생 3", code: "000001" },
+        ],
+      })
+      .expect(409);
+    await t.teacher
+      .post(endpoint)
+      .set(headers)
+      .send({ entries: [{ name: "학생 2", code: "code-4" }] })
+      .expect(409);
+    const entries = [
+      { name: "학생 2", code: "000001" },
+      { name: "학생 3", code: "000002" },
+    ];
+    const result = (
+      await t.teacher.post(endpoint).set(headers).send({ entries }).expect(200)
+    ).body;
+    assert.equal(result.codes[0].code, "000001");
+    await a.get("/api/student").expect(401);
+    const stored = (await t.store.read<Session>("sessions/classroom"))!;
+    assert.equal(stored.students[2].codeHash, hash("000001"));
+    assert.ok(!JSON.stringify(stored).includes("000001"));
+    const version = stored.students[2].bindingVersion;
+    await t.teacher.post(endpoint).set(headers).send({ entries }).expect(200);
+    assert.equal(
+      (await t.store.read<Session>("sessions/classroom"))!.students[2]
+        .bindingVersion,
+      version,
+    );
+  } finally {
+    await t.dispose();
+  }
+});

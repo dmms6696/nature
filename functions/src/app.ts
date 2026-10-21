@@ -698,6 +698,87 @@ export function createApp(store: Store, options: Options) {
           st.bindingVersion++;
           st.codeHash = hash(code);
           extra = { codes: [{ id: st.id, name: st.name, code }] };
+        } else if (operation === "bulk-codes") {
+          assert(
+            Array.isArray(req.body.entries) &&
+              req.body.entries.length >= 1 &&
+              req.body.entries.length <= 45,
+            400,
+            "1~45명의 이름과 코드를 입력하세요.",
+          );
+          const changes = req.body.entries.map(
+            (entry: {
+              name?: unknown;
+              code?: unknown;
+              studentId?: unknown;
+            }) => {
+              assert(
+                entry && typeof entry === "object",
+                400,
+                "명단 형식을 확인하세요.",
+              );
+              const name = text(entry.name, 40);
+              const matches = v.students.filter((x) =>
+                entry.studentId
+                  ? x.id === entry.studentId && x.name === name
+                  : x.name === name,
+              );
+              assert(
+                matches.length === 1,
+                400,
+                name +
+                  ": 등록 명단과 일치하지 않거나 동명이인입니다. 학생별 코드 지정 기능을 사용하세요.",
+              );
+              assert(
+                typeof entry.code === "string",
+                400,
+                "코드는 문자로 입력하세요.",
+              );
+              const code = text(entry.code, 32).toLowerCase();
+              assert(
+                /^[a-z0-9_-]{6,32}$/.test(code),
+                400,
+                name + ": 코드는 영문·숫자·밑줄·하이픈 6~32자입니다.",
+              );
+              return { student: matches[0], code, codeHash: hash(code) };
+            },
+          );
+          assert(
+            new Set(
+              changes.map((x: { student: { id: string } }) => x.student.id),
+            ).size === changes.length,
+            400,
+            "같은 학생이 여러 번 입력되었습니다.",
+          );
+          const replacement = new Map<string, string>(
+            changes.map((x: { student: { id: string }; codeHash: string }) => [
+              x.student.id,
+              x.codeHash,
+            ]),
+          );
+          const finalHashes = v.students.map(
+            (x) => replacement.get(x.id) ?? x.codeHash,
+          );
+          assert(
+            new Set(finalHashes).size === finalHashes.length,
+            409,
+            "중복 코드가 있습니다. 변경하지 않는 학생의 코드도 확인하세요.",
+          );
+          const codes = changes.map(
+            (x: {
+              student: Session["students"][number];
+              code: string;
+              codeHash: string;
+            }) => {
+              if (x.student.codeHash !== x.codeHash) {
+                x.student.codeHash = x.codeHash;
+                x.student.zepId = null;
+                x.student.bindingVersion++;
+              }
+              return { id: x.student.id, name: x.student.name, code: x.code };
+            },
+          );
+          extra = { codes };
         } else if (operation === "set-code") {
           const st = v.students.find((x) => x.id === req.body.studentId);
           assert(st, 404, "학생이 없습니다.");
