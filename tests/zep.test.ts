@@ -172,3 +172,17 @@ test("ZEP 손상된 저장소는 덮어쓰지 않고 오류 안내", () => {
     h.messages.some((m) => m.includes("기존 설정은 지우지 않았습니다")),
   );
 });
+
+test("운영 스크립트는 일반 오브젝트와 관리자 F키에도 진단 출력 없음", () => {
+ for (const role of [0,3001]) {
+  const h=harness(false);
+  h.player.role=role;
+  h.handlers.trigger(h.player,3,99,99,undefined);
+  h.handlers.trigger(h.player,3,98,99,"ordinary-dialog");
+  assert.equal(h.messages.length,0);
+  assert.equal(h.requests.length,0);
+  assert.ok(!("key81" in h.handlers));
+  assert.ok(!("start" in h.handlers));
+  assert.ok(!("join" in h.handlers));
+ }
+});

@@ -115,7 +115,8 @@ function readBindings(player, callback) {
   }
 }
 function showUnbound(player, layerID, x, y, value) {
-  if (CONFIG.diagnostics || player.role >= 3000) {
+  if (!CONFIG.diagnostics) return;
+  if (CONFIG.diagnostics) {
     player.sendMessage(
       "[동백꽃 진단] F키 이벤트 수신: 전달된 key=" +
         (value || "(비어 있음)") +
@@ -249,12 +250,12 @@ App.onTriggerObject.Add(function (player, layerID, x, y, key) {
 if (CONFIG.diagnostics) {
   App.onStart.Add(function () {
     App.sayToAll(
-      "[동백꽃 연결 v1.3] 앱이 실행됐습니다. Q키로 서버 연결을 시험할 수 있습니다.",
+      "[동백꽃 연결 v1.4] 앱이 실행됐습니다. Q키로 서버 연결을 시험할 수 있습니다.",
     );
   });
   App.onJoinPlayer.Add(function (player) {
     player.sendMessage(
-      "[동백꽃 연결 v1.3] 앱 실행 확인. Q키: 내 탐구 현황 연결 시험",
+      "[동백꽃 연결 v1.4] 앱 실행 확인. Q키: 내 탐구 현황 연결 시험",
     );
   });
   App.addOnKeyDown(81, function (player) {
